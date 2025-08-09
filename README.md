@@ -199,12 +199,12 @@ cd server
       <a href="https://github.com/lucsnobre">
         <img src="https://github.com/lucsnobre.png" width="100px;" alt=""/>
         <br />
-        <sub><b>Lucas</b></sub>
+        <sub><b>Meu git</b></sub>
       </a>
       <br />
-      <a href="https://github.com/yourusername/gymia/commits?author=lucsnobre" title="Code">💻</a>
-      <a href="#design-lucsnobre" title="Design">🎨</a>
-      <a href="#ideas-lucsnobre" title="Ideas">🤔</a>
+      <a href="https://github.com/yourusername/gymia/commits?author=lucsnobre" title="Code"></a>
+      <a href="#design-lucsnobre" title="Design"></a>
+      <a href="#ideas-lucsnobre" title="Ideas"></a>
     </td>
   </tr>
 </table>
@@ -214,5 +214,6 @@ cd server
 **"Hoje nóis mija na cara da mídia por que ela depende de nóis pra lucrar"**
 
 </div>
+
 
 
