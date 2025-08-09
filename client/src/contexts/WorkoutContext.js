@@ -1,45 +1,40 @@
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
-import axios from 'axios';
-import toast from 'react-hot-toast';
 import { useAuth } from './AuthContext';
+import { toast } from 'react-hot-toast';
 
-// Workout Context
 const WorkoutContext = createContext();
 
-// Workout Actions
+// Action Types
 const WORKOUT_ACTIONS = {
   SET_LOADING: 'SET_LOADING',
-  SET_CURRENT_PLAN: 'SET_CURRENT_PLAN',
   SET_PLANS: 'SET_PLANS',
   ADD_PLAN: 'ADD_PLAN',
   UPDATE_PLAN: 'UPDATE_PLAN',
   DELETE_PLAN: 'DELETE_PLAN',
-  SET_CHAT_SESSIONS: 'SET_CHAT_SESSIONS',
-  ADD_CHAT_SESSION: 'ADD_CHAT_SESSION',
-  SET_CURRENT_SESSION: 'SET_CURRENT_SESSION',
-  ADD_MESSAGE: 'ADD_MESSAGE',
+  SET_ACTIVE_PLAN: 'SET_ACTIVE_PLAN',
+  SET_STATISTICS: 'SET_STATISTICS',
+  SET_CHAT_HISTORY: 'SET_CHAT_HISTORY',
+  ADD_CHAT_MESSAGE: 'ADD_CHAT_MESSAGE',
   SET_ERROR: 'SET_ERROR',
   CLEAR_ERROR: 'CLEAR_ERROR'
 };
 
 // Initial State
 const initialState = {
-  currentPlan: null,
   plans: [],
-  chatSessions: [],
-  currentSession: null,
-  messages: [],
+  activePlan: null,
+  statistics: {
+    totalPlans: 0,
+    activePlans: 0,
+    completedPlans: 0,
+    totalWorkouts: 0
+  },
+  chatHistory: [],
   loading: false,
-  error: null,
-  pagination: {
-    page: 1,
-    limit: 10,
-    total: 0,
-    pages: 0
-  }
+  error: null
 };
 
-// Workout Reducer
+// Reducer
 function workoutReducer(state, action) {
   switch (action.type) {
     case WORKOUT_ACTIONS.SET_LOADING:
@@ -48,18 +43,10 @@ function workoutReducer(state, action) {
         loading: action.payload
       };
 
-    case WORKOUT_ACTIONS.SET_CURRENT_PLAN:
-      return {
-        ...state,
-        currentPlan: action.payload,
-        loading: false
-      };
-
     case WORKOUT_ACTIONS.SET_PLANS:
       return {
         ...state,
-        plans: action.payload.plans,
-        pagination: action.payload.pagination,
+        plans: action.payload,
         loading: false
       };
 
@@ -67,52 +54,58 @@ function workoutReducer(state, action) {
       return {
         ...state,
         plans: [action.payload, ...state.plans],
-        loading: false
+        statistics: {
+          ...state.statistics,
+          totalPlans: state.statistics.totalPlans + 1,
+          activePlans: action.payload.status === 'active' ? state.statistics.activePlans + 1 : state.statistics.activePlans
+        }
       };
 
     case WORKOUT_ACTIONS.UPDATE_PLAN:
       return {
         ...state,
-        plans: state.plans.map(plan =>
+        plans: state.plans.map(plan => 
           plan.id === action.payload.id ? action.payload : plan
         ),
-        currentPlan: state.currentPlan?.id === action.payload.id ? action.payload : state.currentPlan,
-        loading: false
+        activePlan: state.activePlan?.id === action.payload.id ? action.payload : state.activePlan
       };
 
     case WORKOUT_ACTIONS.DELETE_PLAN:
+      const deletedPlan = state.plans.find(plan => plan.id === action.payload);
       return {
         ...state,
         plans: state.plans.filter(plan => plan.id !== action.payload),
-        currentPlan: state.currentPlan?.id === action.payload ? null : state.currentPlan,
-        loading: false
+        activePlan: state.activePlan?.id === action.payload ? null : state.activePlan,
+        statistics: {
+          ...state.statistics,
+          totalPlans: state.statistics.totalPlans - 1,
+          activePlans: deletedPlan?.status === 'active' ? state.statistics.activePlans - 1 : state.statistics.activePlans,
+          completedPlans: deletedPlan?.status === 'completed' ? state.statistics.completedPlans - 1 : state.statistics.completedPlans
+        }
       };
 
-    case WORKOUT_ACTIONS.SET_CHAT_SESSIONS:
+    case WORKOUT_ACTIONS.SET_ACTIVE_PLAN:
       return {
         ...state,
-        chatSessions: action.payload,
-        loading: false
+        activePlan: action.payload
       };
 
-    case WORKOUT_ACTIONS.ADD_CHAT_SESSION:
+    case WORKOUT_ACTIONS.SET_STATISTICS:
       return {
         ...state,
-        chatSessions: [action.payload, ...state.chatSessions],
-        currentSession: action.payload
+        statistics: action.payload
       };
 
-    case WORKOUT_ACTIONS.SET_CURRENT_SESSION:
+    case WORKOUT_ACTIONS.SET_CHAT_HISTORY:
       return {
         ...state,
-        currentSession: action.payload.session,
-        messages: action.payload.messages || []
+        chatHistory: action.payload
       };
 
-    case WORKOUT_ACTIONS.ADD_MESSAGE:
+    case WORKOUT_ACTIONS.ADD_CHAT_MESSAGE:
       return {
         ...state,
-        messages: [...state.messages, action.payload]
+        chatHistory: [...state.chatHistory, action.payload]
       };
 
     case WORKOUT_ACTIONS.SET_ERROR:
@@ -133,286 +126,285 @@ function workoutReducer(state, action) {
   }
 }
 
-// Workout Provider Component
+// Context Provider
 export function WorkoutProvider({ children }) {
   const [state, dispatch] = useReducer(workoutReducer, initialState);
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user, api } = useAuth();
 
-  // Generate workout plan with AI
-  const generateWorkoutPlan = async (message, profile = {}) => {
-    dispatch({ type: WORKOUT_ACTIONS.SET_LOADING, payload: true });
-    
+  // Load user plans on mount and auth change
+  useEffect(() => {
+    if (isAuthenticated) {
+      loadPlans();
+      loadStatistics();
+      loadChatHistory();
+    } else {
+      // Reset state when logged out
+      dispatch({ type: WORKOUT_ACTIONS.SET_PLANS, payload: [] });
+      dispatch({ type: WORKOUT_ACTIONS.SET_STATISTICS, payload: initialState.statistics });
+      dispatch({ type: WORKOUT_ACTIONS.SET_CHAT_HISTORY, payload: [] });
+      dispatch({ type: WORKOUT_ACTIONS.SET_ACTIVE_PLAN, payload: null });
+    }
+  }, [isAuthenticated]);
+
+  // API Functions
+  const loadPlans = async () => {
     try {
-      const endpoint = isAuthenticated ? '/api/chat/message' : '/api/chat/quick-plan';
-      const payload = isAuthenticated 
-        ? { message, sessionId: state.currentSession?.id }
-        : { message, profile };
+      dispatch({ type: WORKOUT_ACTIONS.SET_LOADING, payload: true });
+      const response = await api.get('/api/plans');
+      dispatch({ type: WORKOUT_ACTIONS.SET_PLANS, payload: response.data.plans || [] });
+    } catch (error) {
+      console.error('Error loading plans:', error);
+      dispatch({ type: WORKOUT_ACTIONS.SET_ERROR, payload: 'Erro ao carregar planos' });
+      toast.error('Erro ao carregar planos');
+    }
+  };
 
-      const response = await axios.post(endpoint, payload);
-      
-      // Add message to current session if authenticated
-      if (isAuthenticated && response.data.sessionId) {
-        dispatch({
-          type: WORKOUT_ACTIONS.ADD_MESSAGE,
-          payload: {
-            message,
-            response: response.data.workoutPlan,
-            type: 'user',
-            timestamp: new Date().toISOString()
-          }
-        });
-      }
+  const loadStatistics = async () => {
+    try {
+      const response = await api.get('/api/plans/statistics');
+      dispatch({ type: WORKOUT_ACTIONS.SET_STATISTICS, payload: response.data });
+    } catch (error) {
+      console.error('Error loading statistics:', error);
+    }
+  };
 
+  const loadChatHistory = async () => {
+    try {
+      const response = await api.get('/api/chat/history');
+      dispatch({ type: WORKOUT_ACTIONS.SET_CHAT_HISTORY, payload: response.data.messages || [] });
+    } catch (error) {
+      console.error('Error loading chat history:', error);
+    }
+  };
+
+  const createPlan = async (planData) => {
+    try {
+      dispatch({ type: WORKOUT_ACTIONS.SET_LOADING, payload: true });
+      const response = await api.post('/api/plans', planData);
+      dispatch({ type: WORKOUT_ACTIONS.ADD_PLAN, payload: response.data.plan });
+      toast.success('Plano criado com sucesso!');
+      return response.data.plan;
+    } catch (error) {
+      console.error('Error creating plan:', error);
+      const errorMessage = error.response?.data?.message || 'Erro ao criar plano';
+      dispatch({ type: WORKOUT_ACTIONS.SET_ERROR, payload: errorMessage });
+      toast.error(errorMessage);
+      throw error;
+    } finally {
       dispatch({ type: WORKOUT_ACTIONS.SET_LOADING, payload: false });
-      return { success: true, data: response.data };
-    } catch (error) {
-      const errorMessage = error.response?.data?.message || 'Erro ao gerar plano de treino';
-      dispatch({ type: WORKOUT_ACTIONS.SET_ERROR, payload: errorMessage });
-      toast.error(errorMessage);
-      return { success: false, error: errorMessage };
     }
   };
 
-  // Save workout plan
-  const savePlan = async (planData) => {
-    dispatch({ type: WORKOUT_ACTIONS.SET_LOADING, payload: true });
-    
+  const updatePlan = async (planId, updates) => {
     try {
-      const response = await axios.post('/api/plans', planData);
-      
-      dispatch({
-        type: WORKOUT_ACTIONS.ADD_PLAN,
-        payload: response.data.plan
-      });
-      
-      toast.success('Plano salvo com sucesso!');
-      return { success: true, data: response.data.plan };
-    } catch (error) {
-      const errorMessage = error.response?.data?.message || 'Erro ao salvar plano';
-      dispatch({ type: WORKOUT_ACTIONS.SET_ERROR, payload: errorMessage });
-      toast.error(errorMessage);
-      return { success: false, error: errorMessage };
-    }
-  };
-
-  // Load user's workout plans
-  const loadPlans = async (page = 1, limit = 10, active = undefined) => {
-    dispatch({ type: WORKOUT_ACTIONS.SET_LOADING, payload: true });
-    
-    try {
-      const params = new URLSearchParams({ page, limit });
-      if (active !== undefined) params.append('active', active);
-      
-      const response = await axios.get(`/api/plans?${params}`);
-      
-      dispatch({
-        type: WORKOUT_ACTIONS.SET_PLANS,
-        payload: response.data
-      });
-      
-      return { success: true, data: response.data };
-    } catch (error) {
-      const errorMessage = error.response?.data?.message || 'Erro ao carregar planos';
-      dispatch({ type: WORKOUT_ACTIONS.SET_ERROR, payload: errorMessage });
-      return { success: false, error: errorMessage };
-    }
-  };
-
-  // Load specific workout plan
-  const loadPlan = async (planId) => {
-    dispatch({ type: WORKOUT_ACTIONS.SET_LOADING, payload: true });
-    
-    try {
-      const response = await axios.get(`/api/plans/${planId}`);
-      
-      dispatch({
-        type: WORKOUT_ACTIONS.SET_CURRENT_PLAN,
-        payload: response.data.plan
-      });
-      
-      return { success: true, data: response.data.plan };
-    } catch (error) {
-      const errorMessage = error.response?.data?.message || 'Erro ao carregar plano';
-      dispatch({ type: WORKOUT_ACTIONS.SET_ERROR, payload: errorMessage });
-      return { success: false, error: errorMessage };
-    }
-  };
-
-  // Update workout plan
-  const updatePlan = async (planId, updateData) => {
-    dispatch({ type: WORKOUT_ACTIONS.SET_LOADING, payload: true });
-    
-    try {
-      const response = await axios.put(`/api/plans/${planId}`, updateData);
-      
-      dispatch({
-        type: WORKOUT_ACTIONS.UPDATE_PLAN,
-        payload: response.data.plan
-      });
-      
+      dispatch({ type: WORKOUT_ACTIONS.SET_LOADING, payload: true });
+      const response = await api.put(`/api/plans/${planId}`, updates);
+      dispatch({ type: WORKOUT_ACTIONS.UPDATE_PLAN, payload: response.data.plan });
       toast.success('Plano atualizado com sucesso!');
-      return { success: true, data: response.data.plan };
+      return response.data.plan;
     } catch (error) {
+      console.error('Error updating plan:', error);
       const errorMessage = error.response?.data?.message || 'Erro ao atualizar plano';
       dispatch({ type: WORKOUT_ACTIONS.SET_ERROR, payload: errorMessage });
       toast.error(errorMessage);
-      return { success: false, error: errorMessage };
+      throw error;
+    } finally {
+      dispatch({ type: WORKOUT_ACTIONS.SET_LOADING, payload: false });
     }
   };
 
-  // Delete workout plan
   const deletePlan = async (planId) => {
-    dispatch({ type: WORKOUT_ACTIONS.SET_LOADING, payload: true });
-    
     try {
-      await axios.delete(`/api/plans/${planId}`);
-      
-      dispatch({
-        type: WORKOUT_ACTIONS.DELETE_PLAN,
-        payload: planId
-      });
-      
+      dispatch({ type: WORKOUT_ACTIONS.SET_LOADING, payload: true });
+      await api.delete(`/api/plans/${planId}`);
+      dispatch({ type: WORKOUT_ACTIONS.DELETE_PLAN, payload: planId });
       toast.success('Plano excluído com sucesso!');
-      return { success: true };
     } catch (error) {
+      console.error('Error deleting plan:', error);
       const errorMessage = error.response?.data?.message || 'Erro ao excluir plano';
       dispatch({ type: WORKOUT_ACTIONS.SET_ERROR, payload: errorMessage });
       toast.error(errorMessage);
-      return { success: false, error: errorMessage };
+      throw error;
+    } finally {
+      dispatch({ type: WORKOUT_ACTIONS.SET_LOADING, payload: false });
     }
   };
 
-  // Load chat sessions
-  const loadChatSessions = async () => {
-    if (!isAuthenticated) return;
-    
-    dispatch({ type: WORKOUT_ACTIONS.SET_LOADING, payload: true });
-    
+  const duplicatePlan = async (planId) => {
     try {
-      const response = await axios.get('/api/chat/sessions');
-      
-      dispatch({
-        type: WORKOUT_ACTIONS.SET_CHAT_SESSIONS,
-        payload: response.data.sessions
-      });
-      
-      return { success: true, data: response.data.sessions };
+      dispatch({ type: WORKOUT_ACTIONS.SET_LOADING, payload: true });
+      const response = await api.post(`/api/plans/${planId}/duplicate`);
+      dispatch({ type: WORKOUT_ACTIONS.ADD_PLAN, payload: response.data.plan });
+      toast.success('Plano duplicado com sucesso!');
+      return response.data.plan;
     } catch (error) {
-      const errorMessage = error.response?.data?.message || 'Erro ao carregar conversas';
+      console.error('Error duplicating plan:', error);
+      const errorMessage = error.response?.data?.message || 'Erro ao duplicar plano';
       dispatch({ type: WORKOUT_ACTIONS.SET_ERROR, payload: errorMessage });
-      return { success: false, error: errorMessage };
-    }
-  };
-
-  // Load chat session messages
-  const loadChatMessages = async (sessionId) => {
-    dispatch({ type: WORKOUT_ACTIONS.SET_LOADING, payload: true });
-    
-    try {
-      const response = await axios.get(`/api/chat/sessions/${sessionId}/messages`);
-      
-      dispatch({
-        type: WORKOUT_ACTIONS.SET_CURRENT_SESSION,
-        payload: {
-          session: { id: sessionId },
-          messages: response.data.messages
-        }
-      });
-      
-      return { success: true, data: response.data };
-    } catch (error) {
-      const errorMessage = error.response?.data?.message || 'Erro ao carregar mensagens';
-      dispatch({ type: WORKOUT_ACTIONS.SET_ERROR, payload: errorMessage });
-      return { success: false, error: errorMessage };
-    }
-  };
-
-  // Delete chat session
-  const deleteChatSession = async (sessionId) => {
-    try {
-      await axios.delete(`/api/chat/sessions/${sessionId}`);
-      
-      dispatch({
-        type: WORKOUT_ACTIONS.SET_CHAT_SESSIONS,
-        payload: state.chatSessions.filter(session => session.id !== sessionId)
-      });
-      
-      if (state.currentSession?.id === sessionId) {
-        dispatch({
-          type: WORKOUT_ACTIONS.SET_CURRENT_SESSION,
-          payload: { session: null, messages: [] }
-        });
-      }
-      
-      toast.success('Conversa excluída com sucesso!');
-      return { success: true };
-    } catch (error) {
-      const errorMessage = error.response?.data?.message || 'Erro ao excluir conversa';
       toast.error(errorMessage);
-      return { success: false, error: errorMessage };
+      throw error;
+    } finally {
+      dispatch({ type: WORKOUT_ACTIONS.SET_LOADING, payload: false });
     }
   };
 
-  // Save plan to localStorage for guest users
-  const saveToLocalStorage = (planData) => {
+  const savePlanFromChat = async (workoutPlan) => {
     try {
-      const existingPlans = JSON.parse(localStorage.getItem('gymia_guest_plans') || '[]');
-      const newPlan = {
-        id: Date.now(),
-        ...planData,
-        createdAt: new Date().toISOString()
+      const planData = {
+        name: workoutPlan.name || 'Plano Gerado pela IA',
+        description: workoutPlan.description || 'Plano personalizado gerado pelo assistente de IA',
+        exercises: workoutPlan.exercises || [],
+        duration: workoutPlan.duration || '4 semanas',
+        difficulty: workoutPlan.difficulty || 'intermediate',
+        goals: workoutPlan.goals || [],
+        status: 'active',
+        source: 'ai_generated'
       };
-      
-      const updatedPlans = [newPlan, ...existingPlans.slice(0, 4)]; // Keep only 5 plans
-      localStorage.setItem('gymia_guest_plans', JSON.stringify(updatedPlans));
-      
-      toast.success('Plano salvo localmente! Faça login para salvar permanentemente.');
-      return { success: true, data: newPlan };
+
+      return await createPlan(planData);
     } catch (error) {
-      toast.error('Erro ao salvar plano localmente');
-      return { success: false, error: 'Storage error' };
+      console.error('Error saving plan from chat:', error);
+      throw error;
     }
   };
 
-  // Load plans from localStorage for guest users
-  const loadFromLocalStorage = () => {
+  const sendChatMessage = async (message, sessionId = null) => {
     try {
-      const plans = JSON.parse(localStorage.getItem('gymia_guest_plans') || '[]');
-      return { success: true, data: plans };
+      dispatch({ type: WORKOUT_ACTIONS.SET_LOADING, payload: true });
+      
+      // Add user message to chat history
+      const userMessage = {
+        id: Date.now(),
+        message,
+        message_type: 'user',
+        timestamp: new Date().toISOString()
+      };
+      dispatch({ type: WORKOUT_ACTIONS.ADD_CHAT_MESSAGE, payload: userMessage });
+
+      const response = await api.post('/api/chat/message', { message, sessionId });
+      
+      // Add AI response to chat history
+      const aiMessage = {
+        id: Date.now() + 1,
+        message: 'Plano de treino personalizado',
+        response: response.data.workoutPlan,
+        message_type: 'assistant',
+        timestamp: new Date().toISOString()
+      };
+      dispatch({ type: WORKOUT_ACTIONS.ADD_CHAT_MESSAGE, payload: aiMessage });
+
+      return response.data;
     } catch (error) {
-      return { success: false, data: [] };
+      console.error('Error sending chat message:', error);
+      const errorMessage = error.response?.data?.message || 'Erro ao enviar mensagem';
+      dispatch({ type: WORKOUT_ACTIONS.SET_ERROR, payload: errorMessage });
+      toast.error(errorMessage);
+      throw error;
+    } finally {
+      dispatch({ type: WORKOUT_ACTIONS.SET_LOADING, payload: false });
     }
   };
 
-  // Clear error
+  const setActivePlan = (plan) => {
+    dispatch({ type: WORKOUT_ACTIONS.SET_ACTIVE_PLAN, payload: plan });
+  };
+
   const clearError = () => {
     dispatch({ type: WORKOUT_ACTIONS.CLEAR_ERROR });
   };
 
-  const value = {
+  // Local Storage Functions (for guest users)
+  const saveToLocalStorage = (key, data) => {
+    try {
+      localStorage.setItem(`gymia_${key}`, JSON.stringify(data));
+    } catch (error) {
+      console.error('Error saving to localStorage:', error);
+    }
+  };
+
+  const loadFromLocalStorage = (key) => {
+    try {
+      const data = localStorage.getItem(`gymia_${key}`);
+      return data ? JSON.parse(data) : null;
+    } catch (error) {
+      console.error('Error loading from localStorage:', error);
+      return null;
+    }
+  };
+
+  const clearLocalStorage = () => {
+    try {
+      Object.keys(localStorage).forEach(key => {
+        if (key.startsWith('gymia_')) {
+          localStorage.removeItem(key);
+        }
+      });
+    } catch (error) {
+      console.error('Error clearing localStorage:', error);
+    }
+  };
+
+  // Guest Functions
+  const createGuestPlan = (planData) => {
+    const guestPlan = {
+      id: Date.now(),
+      ...planData,
+      created_at: new Date().toISOString(),
+      isGuest: true
+    };
+
+    const existingPlans = loadFromLocalStorage('guest_plans') || [];
+    const updatedPlans = [guestPlan, ...existingPlans];
+    saveToLocalStorage('guest_plans', updatedPlans);
+    
+    dispatch({ type: WORKOUT_ACTIONS.ADD_PLAN, payload: guestPlan });
+    toast.success('Plano salvo localmente!');
+    return guestPlan;
+  };
+
+  const loadGuestPlans = () => {
+    const guestPlans = loadFromLocalStorage('guest_plans') || [];
+    dispatch({ type: WORKOUT_ACTIONS.SET_PLANS, payload: guestPlans });
+  };
+
+  // Context Value
+  const contextValue = {
+    // State
     ...state,
-    generateWorkoutPlan,
-    savePlan,
+    
+    // Actions
     loadPlans,
-    loadPlan,
+    createPlan,
     updatePlan,
     deletePlan,
-    loadChatSessions,
-    loadChatMessages,
-    deleteChatSession,
+    duplicatePlan,
+    savePlanFromChat,
+    sendChatMessage,
+    setActivePlan,
+    clearError,
+    
+    // Statistics
+    loadStatistics,
+    
+    // Chat
+    loadChatHistory,
+    
+    // Guest Functions
+    createGuestPlan,
+    loadGuestPlans,
     saveToLocalStorage,
     loadFromLocalStorage,
-    clearError
+    clearLocalStorage
   };
 
   return (
-    <WorkoutContext.Provider value={value}>
+    <WorkoutContext.Provider value={contextValue}>
       {children}
     </WorkoutContext.Provider>
   );
 }
 
-// Custom hook to use workout context
+// Custom Hook
 export function useWorkout() {
   const context = useContext(WorkoutContext);
   if (!context) {
