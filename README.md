@@ -199,7 +199,7 @@ cd server
       <a href="https://github.com/lucsnobre">
         <img src="https://github.com/lucsnobre.png" width="100px;" alt=""/>
         <br />
-        <sub><b>Cachorrada</b></sub>
+        <sub><b>Lucas</b></sub>
       </a>
       <br />
       <a href="https://github.com/yourusername/gymia/commits?author=lucsnobre" title="Code">💻</a>
@@ -208,13 +208,11 @@ cd server
     </td>
   </tr>
 </table>
----
 
 <div align="center">
 
-**Feito com ❤️ e muita 💪 para revolucionar seus treinos**
-
-⭐ **Se este projeto te ajudou, deixe uma estrela!** ⭐
+**"Hoje nóis mija na cara da mídia por que ela depende de nóis pra lucrar"**
 
 </div>
+
 
