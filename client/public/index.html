@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#6366f1" />
+    <meta name="description" content="GymIA - Seu Personal Trainer com Inteligência Artificial. Transforme seus treinos com ciência e IA." />
+    <meta name="keywords" content="treino, academia, inteligência artificial, fitness, personal trainer, exercícios" />
+    <meta name="author" content="GymIA Team" />
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://gymia.app/" />
+    <meta property="og:title" content="GymIA - Personal Trainer com IA" />
+    <meta property="og:description" content="Transforme seus treinos com a ciência e a inteligência artificial" />
+    <meta property="og:image" content="%PUBLIC_URL%/og-image.png" />
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image" />
+    <meta property="twitter:url" content="https://gymia.app/" />
+    <meta property="twitter:title" content="GymIA - Personal Trainer com IA" />
+    <meta property="twitter:description" content="Transforme seus treinos com a ciência e a inteligência artificial" />
+    <meta property="twitter:image" content="%PUBLIC_URL%/og-image.png" />
+
+    <!-- Apple Touch Icon -->
+    <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
+    
+    <!-- Manifest -->
+    <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
+    
+    <!-- Preconnect to external domains -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+    
+    <!-- Favicon -->
+    <link rel="shortcut icon" href="%PUBLIC_URL%/favicon.ico" type="image/x-icon" />
+    
+    <title>GymIA - Personal Trainer com Inteligência Artificial</title>
+    
+    <!-- Structured Data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "GymIA",
+      "description": "Personal Trainer com Inteligência Artificial",
+      "url": "https://gymia.app",
+      "applicationCategory": "HealthApplication",
+      "operatingSystem": "Web",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "BRL"
+      },
+      "author": {
+        "@type": "Organization",
+        "name": "GymIA Team"
+      }
+    }
+    </script>
+  </head>
+  <body>
+    <noscript>
+      <div style="
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        font-family: 'Inter', sans-serif;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        text-align: center;
+        padding: 20px;
+      ">
+        <div>
+          <h1>🏋️‍♂️ GymIA</h1>
+          <p>Você precisa habilitar o JavaScript para executar esta aplicação.</p>
+          <p>You need to enable JavaScript to run this app.</p>
+        </div>
+      </div>
+    </noscript>
+    
+    <!-- Root element where React will mount -->
+    <div id="root"></div>
+    
+    <!-- Preload critical resources -->
+    <link rel="preload" href="%PUBLIC_URL%/static/css/main.css" as="style" />
+    
+    <!-- Service Worker Registration (if needed) -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function() {
+          navigator.serviceWorker.register('%PUBLIC_URL%/sw.js')
+            .then(function(registration) {
+              console.log('SW registered: ', registration);
+            })
+            .catch(function(registrationError) {
+              console.log('SW registration failed: ', registrationError);
+            });
+        });
+      }
+    </script>
+  </body>
+</html>
